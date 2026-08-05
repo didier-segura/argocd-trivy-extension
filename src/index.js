@@ -14,10 +14,13 @@ const Extension = (props) => {
   const resourceName = isPod ? resource?.metadata?.ownerReferences[0].name.toLowerCase() : resource?.metadata?.name;
   const resourceKind = isPod ? resource?.metadata?.ownerReferences[0].kind.toLowerCase() : resource?.kind?.toLowerCase();
 
-  let [containerName] = useState(isPod ? resource?.spec?.containers[0]?.name : isCronJob ? resource?.spec?.jobTemplate?.spec?.template?.spec.containers[0]?.name : resource?.spec?.template?.spec?.containers[0]?.name);
+  const [containerName, setContainerName] = useState(isPod ? resource?.spec?.containers[0]?.name : isCronJob ? resource?.spec?.jobTemplate?.spec?.template?.spec.containers[0]?.name : resource?.spec?.template?.spec?.containers[0]?.name);
 
-  const baseURI = `${window.location.origin}/api/v1/applications/${appName}/resource`
-  let [reportUrl, setReportUrl] = useState(`${baseURI}?name=${resourceKind}-${resourceName}-${containerName}&namespace=${resourceNamespace}&resourceName=${resourceKind}-${resourceName}-${containerName}&version=v1alpha1&kind=VulnerabilityReport&group=aquasecurity.github.io`);
+  const baseURI = `${window.location.origin}/api/v1/applications/${appName}/resource`;
+  const buildReportUrl = (kind, name, ns, container) =>
+    `${baseURI}?name=${kind}-${name}-${container}&namespace=${ns}&resourceName=${kind}-${name}-${container}&version=v1alpha1&kind=VulnerabilityReport&group=aquasecurity.github.io`;
+  const fallbackConfig = { appName, resourceNamespace, resourceKind, resourceName, containerName };
+  let [reportUrl, setReportUrl] = useState(buildReportUrl(resourceKind, resourceName, resourceNamespace, containerName));
 
   let containers = []
   if(isPod) {
@@ -37,8 +40,9 @@ const Extension = (props) => {
   };
 
   const onOptionChangeHandler = (event) => {
-    containerName = event.target.value
-    setReportUrl(`${baseURI}?name=${resourceKind}-${resourceName}-${containerName}&namespace=${resourceNamespace}&resourceName=${resourceKind}-${resourceName}-${containerName}&version=v1alpha1&kind=VulnerabilityReport&group=aquasecurity.github.io`)
+    const newContainer = event.target.value;
+    setContainerName(newContainer);
+    setReportUrl(buildReportUrl(resourceKind, resourceName, resourceNamespace, newContainer));
   };
 
   return (
@@ -54,10 +58,10 @@ const Extension = (props) => {
           <Tab label='Dashboard' />
         </Tabs>
         {currentTabIndex === 0 && (
-          <DataGrid reportUrl={reportUrl} />
+          <DataGrid reportUrl={reportUrl} fallbackConfig={fallbackConfig} />
         )}
         {currentTabIndex === 1 && (
-          <Dashboard reportUrl={reportUrl} />
+          <Dashboard reportUrl={reportUrl} fallbackConfig={fallbackConfig} />
         )}
       </React.Fragment>
     </div>

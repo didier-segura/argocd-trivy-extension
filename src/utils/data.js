@@ -2,9 +2,18 @@ import axios from 'axios';
 
 var vulnerabilityData = {}
 
-async function GetVulnerabilityData(reportUrl) {
+async function GetVulnerabilityData(reportUrl, fallbackConfig) {
   try {
-    const response = await axios.get(reportUrl);
+    let response = await fetchReportByUrl(reportUrl);
+
+    if (response === undefined && fallbackConfig) {
+      response = await findReportByLabels(fallbackConfig);
+    }
+
+    if (response === undefined) {
+      return { status: 'error', vulnerabilities: [] };
+    }
+
     const manifest = JSON.parse(response?.data?.manifest);
     const vulnerabilities = manifest?.report?.vulnerabilities ?? [];
     return {
@@ -16,8 +25,61 @@ async function GetVulnerabilityData(reportUrl) {
   }
 }
 
-export async function GridData(reportUrl) {
-  const { status, vulnerabilities } = await GetVulnerabilityData(reportUrl);
+/**
+ * Fetch VulnerabilityReport by exact name (fails when Trivy uses hash for names > 63 chars).
+ */
+async function fetchReportByUrl(reportUrl) {
+  const response = await axios.get(reportUrl)
+    .catch(function () {
+      return undefined;
+    });
+  return response;
+}
+
+/**
+ * Find VulnerabilityReport when direct fetch fails (e.g. Trivy uses hash-based names when full name > 63 chars).
+ * Uses Argo CD resource-tree to discover all VulnerabilityReports in namespace, fetches each and matches by labels.
+ * Note: Hash computation is not replicated (Trivy uses Go spew + k8s SafeEncodeString) - resource-tree is the fallback.
+ */
+async function findReportByLabels(fallbackConfig) {
+  if (!fallbackConfig?.appName) return undefined;
+
+  const { appName, resourceNamespace, resourceName, containerName } = fallbackConfig;
+  const treeUrl = `${window.location.origin}/api/v1/applications/${appName}/resource-tree`;
+  const resourceUrl = `${window.location.origin}/api/v1/applications/${appName}/resource`;
+
+  const treeResponse = await axios.get(treeUrl).catch(() => undefined);
+  if (!treeResponse?.data?.nodes) return undefined;
+
+  // Get all VulnerabilityReports in namespace (parentRefs may be missing for operator-created resources)
+  const reportNodes = treeResponse.data.nodes.filter(
+    (n) =>
+      (n.kind === 'VulnerabilityReport' || n.kind === 'vulnerabilityreport') &&
+      (n.group === 'aquasecurity.github.io' || !n.group) &&
+      n.namespace === resourceNamespace
+  );
+
+  for (const node of reportNodes) {
+    const reportName = node.name;
+    const fetchUrl = `${resourceUrl}?name=${encodeURIComponent(reportName)}&namespace=${encodeURIComponent(resourceNamespace)}&resourceName=${encodeURIComponent(reportName)}&version=v1alpha1&kind=VulnerabilityReport&group=aquasecurity.github.io`;
+    const response = await axios.get(fetchUrl).catch(() => undefined);
+    if (!response?.data?.manifest) continue;
+
+    const manifest = JSON.parse(response.data.manifest);
+    const labels = manifest?.metadata?.labels || {};
+    const reportContainer = labels['trivy-operator.container.name'];
+
+    if (!containerName || reportContainer === containerName) {
+      return response;
+    }
+  }
+  return undefined;
+}
+
+
+
+export async function GridData(reportUrl, fallbackConfig) {
+  const { status, vulnerabilities } = await GetVulnerabilityData(reportUrl, fallbackConfig);
   const rows = vulnerabilities.map(v => [
     v.resource,
     v.score,
@@ -32,8 +94,8 @@ export async function GridData(reportUrl) {
   return { status, rows };
 }
 
-export async function DashboardData(reportUrl) {
-  const { status, vulnerabilities } = await GetVulnerabilityData(reportUrl);
+export async function DashboardData(reportUrl, fallbackConfig) {
+  const { status, vulnerabilities } = await GetVulnerabilityData(reportUrl, fallbackConfig);
   vulnerabilityData = vulnerabilities;
 
   if (status !== 'ok') {

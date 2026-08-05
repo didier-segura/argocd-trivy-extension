@@ -8,25 +8,20 @@ class Dashboard extends Component {
     state = {
     }
     componentDidMount() {
-        const fetchData = async () => {
-            const res = await DashboardData(this.props.reportUrl).then(data => {
-                return data;
-            })
-            this.setState(res);
-        }
-        fetchData();
+        this.fetchData();
     }
 
-    componentDidUpdate(prevProp, prevState){
+    componentDidUpdate(prevProp) {
         if (prevProp.reportUrl !== this.props.reportUrl) {
-            const fetchData = async () => {
-                const res = await DashboardData(this.props.reportUrl).then(data => {
-                    return data;
-                })
-                this.setState(res);
-            }
-            fetchData();
+            this.fetchData();
         }
+    }
+
+    fetchData = async () => {
+        const res = await DashboardData(this.props.reportUrl, this.props.fallbackConfig).then(data => {
+            return data;
+        });
+        this.setState(res);
     }
 
     render() {
