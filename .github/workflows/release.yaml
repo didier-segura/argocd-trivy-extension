@@ -27,6 +27,10 @@ jobs:
         run: |
             version="v$(node -p "require('./package.json').version")"
             (cd ./dist/resources && sha256sum extension-trivy.tar) > extension-trivy_checksums.txt
-            gh release create --generate-notes $version ./dist/resources/extension-trivy.tar ./extension-trivy_checksums.txt
+            if gh release view $version; then
+              gh release upload $version ./dist/resources/extension-trivy.tar ./extension-trivy_checksums.txt --clobber
+            else
+              gh release create --generate-notes $version ./dist/resources/extension-trivy.tar ./extension-trivy_checksums.txt
+            fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
