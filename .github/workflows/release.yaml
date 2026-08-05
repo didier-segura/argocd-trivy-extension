@@ -1,6 +1,9 @@
 name: release
 on: 
     workflow_dispatch:
+    push:
+      tags:
+        - 'v*'
 permissions:
   contents: read
   actions: read
@@ -24,6 +27,6 @@ jobs:
         run: |
             version="v$(node -p "require('./package.json').version")"
             (cd ./dist/resources && sha256sum extension-trivy.tar) > extension-trivy_checksums.txt
-            gh release create -F CHANGELOG.md $version ./dist/resources/extension-trivy.tar ./extension-trivy_checksums.txt
+            gh release create --generate-notes $version ./dist/resources/extension-trivy.tar ./extension-trivy_checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
