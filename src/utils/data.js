@@ -80,7 +80,18 @@ async function findReportByLabels(fallbackConfig) {
 
 export async function GridData(reportUrl, fallbackConfig) {
   const { status, vulnerabilities } = await GetVulnerabilityData(reportUrl, fallbackConfig);
-  const rows = vulnerabilities.map(v => [
+  
+  // Default sort by severity (Critical -> High -> Medium -> Low -> Unknown)
+  const severityOrder = { "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4 };
+  const sortedVulns = [...vulnerabilities].sort((a, b) => {
+    const orderA = severityOrder[a.severity?.toUpperCase()] ?? 5;
+    const orderB = severityOrder[b.severity?.toUpperCase()] ?? 5;
+    if (orderA !== orderB) return orderA - orderB;
+    // Fallback to score if severities are equal
+    return (b.score || 0) - (a.score || 0);
+  });
+
+  const rows = sortedVulns.map(v => [
     v.resource,
     v.score,
     v.severity,
