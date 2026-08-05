@@ -29,9 +29,9 @@ server:
         env:
           # URLs used in example are for the latest release, replace with the desired version if needed
           - name: EXTENSION_URL
-            value: https://github.com/mziyabo/argocd-trivy-extension/releases/latest/download/extension-trivy.tar
+            value: https://github.com/didier-segura/argocd-trivy-extension/releases/latest/download/extension-trivy.tar
           - name: EXTENSION_CHECKSUM_URL
-            value: https://github.com/mziyabo/argocd-trivy-extension/releases/latest/download/extension-trivy_checksums.txt
+            value: https://github.com/didier-segura/argocd-trivy-extension/releases/latest/download/extension-trivy_checksums.txt
 ```
 
 ### Kustomize
@@ -52,9 +52,9 @@ spec:
           env:
           # URLs used in example are for the latest release, replace with the desired version if needed
           - name: EXTENSION_URL
-            value: https://github.com/mziyabo/argocd-trivy-extension/releases/latest/download/extension-trivy.tar
+            value: https://github.com/didier-segura/argocd-trivy-extension/releases/latest/download/extension-trivy.tar
           - name: EXTENSION_CHECKSUM_URL
-            value: https://github.com/mziyabo/argocd-trivy-extension/releases/latest/download/extension-trivy_checksums.txt
+            value: https://github.com/didier-segura/argocd-trivy-extension/releases/latest/download/extension-trivy_checksums.txt
           volumeMounts:
             - name: extensions
               mountPath: /tmp/extensions/
@@ -73,7 +73,12 @@ spec:
 
 ## Release Notes
 
-WIP, contributions welcome
+### v0.4.0
+- **Modern UI Overhaul**: Implemented premium glassmorphism, micro-animations, and dynamic hover effects for the dashboard and vulnerability grid.
+- **Enhanced CVE Tracking**: Added automatic inline links to the National Vulnerability Database (NVD/NIST) for rapid vulnerability assessment.
+- **CVSS Score Visualization**: The table now features a color-coded progress bar metric for severity scores.
+- **Intelligent Sorting**: Vulnerabilities are now pre-sorted by severity by default (Critical to Low).
+- **Consolidated Codebase**: Backported missing functionality from upstream forks (fallback configuration via Resource Tree lookup).
 
 ## License
 
