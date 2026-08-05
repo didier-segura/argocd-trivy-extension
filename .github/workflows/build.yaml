@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: "--no-deprecation"
     steps:
       - uses: actions/checkout@v5
       - name: Use Node.js
