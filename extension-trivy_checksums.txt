@@ -1,0 +1,1 @@
+5c63030df95c3375bd998ecdfcf25557d4fcce93985df28f1be08b4fa0ddbf4f  ./dist/resources/extension-trivy.tar
