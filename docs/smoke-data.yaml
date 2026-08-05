@@ -1,0 +1,59 @@
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: VulnerabilityReport
+metadata:
+  name: mock-app-report
+  namespace: default
+  labels:
+    trivy-operator.container.name: mock-container
+report:
+  vulnerabilities:
+    - vulnerabilityID: CVE-2023-12345
+      resource: openssl
+      installedVersion: 1.1.1t-r0
+      fixedVersion: 1.1.1u-r0
+      severity: CRITICAL
+      score: 9.8
+      title: "OpenSSL: Memory corruption during TLS handshake"
+      primaryLink: "https://avd.aquasec.com/nvd/cve-2023-12345"
+      publishedDate: "2023-05-10T00:00:00Z"
+      lastModifiedDate: "2023-06-01T00:00:00Z"
+    - vulnerabilityID: CVE-2022-98765
+      resource: curl
+      installedVersion: 7.85.0-r0
+      fixedVersion: ""
+      severity: HIGH
+      score: 7.5
+      title: "curl: SSRF vulnerability"
+      primaryLink: "https://avd.aquasec.com/nvd/cve-2022-98765"
+      publishedDate: "2022-10-15T00:00:00Z"
+      lastModifiedDate: "2022-11-20T00:00:00Z"
+    - vulnerabilityID: CVE-2021-44228
+      resource: log4j
+      installedVersion: 2.14.1
+      fixedVersion: 2.15.0
+      severity: CRITICAL
+      score: 10.0
+      title: "log4j: JNDI features do not protect against attacker controlled LDAP and other JNDI related endpoints (Log4Shell)"
+      primaryLink: "https://avd.aquasec.com/nvd/cve-2021-44228"
+      publishedDate: "2021-12-10T00:00:00Z"
+      lastModifiedDate: "2021-12-20T00:00:00Z"
+    - vulnerabilityID: CVE-2023-55555
+      resource: sqlite
+      installedVersion: 3.40.0
+      fixedVersion: 3.41.0
+      severity: MEDIUM
+      score: 5.3
+      title: "sqlite: out-of-bounds read"
+      primaryLink: "https://avd.aquasec.com/nvd/cve-2023-55555"
+      publishedDate: "2023-08-01T00:00:00Z"
+      lastModifiedDate: "2023-08-05T00:00:00Z"
+    - vulnerabilityID: CVE-2020-11111
+      resource: bash
+      installedVersion: 5.0.17
+      fixedVersion: ""
+      severity: LOW
+      score: 3.3
+      title: "bash: Minor memory leak"
+      primaryLink: "https://avd.aquasec.com/nvd/cve-2020-11111"
+      publishedDate: "2020-04-10T00:00:00Z"
+      lastModifiedDate: "2020-05-15T00:00:00Z"
