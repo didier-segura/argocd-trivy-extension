@@ -24,7 +24,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "webpack --config ./webpack.config.js && tar -C dist -cvf ./dist/resources/extension-trivy.tar resources"
+    "build": "webpack --config ./webpack.config.js && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
   },
   "eslintConfig": {
     "extends": [
