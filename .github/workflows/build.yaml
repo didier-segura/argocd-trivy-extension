@@ -4,6 +4,7 @@ on:
     push:
         branches:
             - 'main'
+            - 'backport-forks'
 jobs:
   build:
     runs-on: ubuntu-latest
