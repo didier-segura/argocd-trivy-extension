@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.1 2026-08-05
+
+- `Chore`: Switched GitHub Actions release pipeline to use auto-generated release notes
+
+## v0.4.0 2026-08-05
+
+- `Enhancement`: Modernized UI with glassmorphism, dynamic micro-animations, and updated color palettes
+- `Enhancement`: Added interactive visual progress bars for CVSS scores and direct links to NVD/NIST databases
+- `Refactor`: Fully migrated build toolchain from unmaintained `react-scripts`/Webpack to Vite (improves build times by ~3x)
+- `Chore`: Migrated GitHub Actions CI/CD workflows to run on Node.js 24
+- `Security`: Eliminated 67 dependency vulnerabilities by replacing legacy Webpack tree, resolving critical npm audit warnings
+
 ## v0.2.3 2026-02-23
 
 - Release v0.2.3 (validated resource-tree fallback for long-named workloads)
