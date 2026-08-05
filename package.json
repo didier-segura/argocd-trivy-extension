@@ -12,9 +12,9 @@
     "recharts": "^2.12.3"
   },
   "peerDependencies": {
+    "moment": "^2.29.4",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "moment": "^2.29.4"
+    "react-dom": "^18.2.0"
   },
   "browser": {
     "fs": false,
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
+    "build": "vite build && rm -f ./dist/resources/extension-trivy.tar && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
   },
   "eslintConfig": {
     "extends": [
@@ -49,6 +49,7 @@
     "@testing-library/user-event": "^13.5.0",
     "@vitejs/plugin-react": "^4.2.1",
     "sass": "^1.72.0",
-    "vite": "^5.2.8"
+    "vite": "^5.2.8",
+    "vite-plugin-css-injected-by-js": "^3.5.2"
   }
 }
