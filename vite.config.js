@@ -11,7 +11,7 @@ export default defineConfig({
       entry: 'src/index.jsx',
       name: 'tmp.extensions',
       fileName: () => 'extension-trivy.js',
-      formats: ['umd']
+      formats: ['iife']
     },
     rollupOptions: {
       external: ['react', 'react-dom', 'react-dom/client', 'moment'],
