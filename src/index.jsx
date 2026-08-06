@@ -255,5 +255,3 @@ const component = Extension;
   window.tmp = window.tmp || {};
   window.tmp.extensions = component;
 })(window);
-
-export default component;
