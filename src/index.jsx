@@ -250,4 +250,10 @@ const component = Extension;
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }
   );
+  
+  // Backward compatibility for ArgoCD
+  window.tmp = window.tmp || {};
+  window.tmp.extensions = component;
 })(window);
+
+export default component;
