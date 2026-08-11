@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.17 2026-08-11
+
+- `Fix`: The Severity Summary pie chart (the only chart left using `ResponsiveContainer`, previously assumed reliable because of its fixed-pixel wrapper div) was still going blank in live testing after v0.4.16, since it sits inside a `display:flex` container which triggers the same Recharts width-measurement failure as the CSS Grid cards. Converted it to the `MeasuredChartContainer` (`ResizeObserver`-based) pattern used by the other 6 charts, and removed the now-unused `ResponsiveContainer` import. All 8 Dashboard cards now use consistent, reliable sizing.
+
 ## v0.4.16 2026-08-11
 
 - `Fix`: Confirmed via v0.4.15's diagnostics (browser console showed `topPackages: 15`, `vulnerabilitiesByType: 12`, `patchSummaryData: 5`, etc. — all non-empty — and no error boundary was triggered) that the 6 blank Dashboard charts were neither a data problem nor a JS exception, but Recharts' `ResponsiveContainer` failing to measure a non-zero width on first mount inside this dashboard's CSS Grid layout and never recovering. Replaced `ResponsiveContainer` in the 6 affected charts (Top Packages, Vulnerabilities by Type, Patchable Vulnerabilities, Top Vulnerable Resources + its sparklines, Vulnerabilities by Year, Timeline, and the resource drill-down sparkline) with a `MeasuredChartContainer` that measures its own DOM node directly via `ResizeObserver` and passes an explicit pixel width straight to the chart component, bypassing `ResponsiveContainer`'s internal measurement entirely. Severity Summary and the Resource × Severity Heatmap (already working) are left unchanged.

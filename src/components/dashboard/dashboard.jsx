@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Area, AreaChart, RadarChart, PolarGrid, Radar, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Line } from 'recharts';
+import { Area, AreaChart, RadarChart, PolarGrid, Radar, PolarAngleAxis, PolarRadiusAxis, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Line } from 'recharts';
 import { DashboardData } from '../../utils/data';
 import "./dashboard.scss";
 import "../grid/vulnerability-report.scss";
@@ -231,25 +231,27 @@ class Dashboard extends Component {
                         <span className="vulnerability-charts__title">Severity Summary</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 8 }}>
                             <div style={{ width: 220, height: 180 }}>
-                                <ResponsiveContainer width="100%" height={180}>
-                                    <PieChart>
-                                        <Pie
-                                            data={(severitySummary && severitySummary.length) ? severitySummary.map(s => ({ name: s.severity, count: s.count })) : (severityData || [])}
-                                            dataKey="count"
-                                            nameKey="name"
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={50}
-                                            outerRadius={80}
-                                            paddingAngle={2}
-                                        >
-                                            {(severitySummary && severitySummary.length ? severitySummary : severityData || []).map((entry, index) => (
-                                                <Cell key={`sevcell-${index}`} fill={severityHexColors[index % severityHexColors.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                <MeasuredChartContainer height={180}>
+                                    {(width) => (
+                                        <PieChart width={width} height={180}>
+                                            <Pie
+                                                data={(severitySummary && severitySummary.length) ? severitySummary.map(s => ({ name: s.severity, count: s.count })) : (severityData || [])}
+                                                dataKey="count"
+                                                nameKey="name"
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={50}
+                                                outerRadius={80}
+                                                paddingAngle={2}
+                                            >
+                                                {(severitySummary && severitySummary.length ? severitySummary : severityData || []).map((entry, index) => (
+                                                    <Cell key={`sevcell-${index}`} fill={severityHexColors[index % severityHexColors.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip />
+                                        </PieChart>
+                                    )}
+                                </MeasuredChartContainer>
                             </div>
                             <div style={{ flex: 1 }}>
                                 {(() => {
