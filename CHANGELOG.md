@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.14 2026-08-11
+
+- `Fix`: Dashboard tab showed only 2 of 8 chart cards (Severity Summary and Resource × Severity Heatmap); the other six charts (Top Packages, Vulnerabilities by Type, Patchable Vulnerabilities, Top Vulnerable Resources, Vulnerabilities by Year, Timeline) rendered completely blank. Root cause: those charts' `ResponsiveContainer` had no ancestor element with an explicit CSS size, so inside the CSS Grid dashboard layout Recharts could not reliably measure a non-zero width/height on mount. All `ResponsiveContainer` usages are now wrapped in a div with an explicit pixel width/height, matching the pattern already used successfully by the working Severity Summary chart.
+- `Fix`: "Top Packages by Vulnerabilities" chart grouped by the wrong field (a non-existent `packageName`/`pkgName`/`package`, falling back to the vulnerability `title`), producing meaningless per-CVE groupings. Now groups by the vulnerability's `resource` (package) field first.
+- `Fix`: "Vulnerabilities by Type" chart could throw when a vulnerability had no `title`, aborting the rest of `DashboardData()`. Made the title check null-safe.
+- `Fix`: Base OS badge not appearing for some containers. `GetVulnerabilityData()` now also checks Trivy Operator's actual `report.os.family` / `report.os.name` fields (and a top-level `os.family`/`os.name`) in addition to the previously-checked `baseOS`/`image.os`/`baseImage`/label fields.
+- `Enhancement`: Added a "Select container :" label before the container selector in the resource header.
+- `Fix`: Severity filter `<select>` in the Table tab stretched to the full width of its container. Constrained it to `max-width: 180px`.
+- `Enhancement`: Added a Score filter (9.0-10.0 / 7.0-8.9 / 4.0-6.9 / 0.0-3.9 / All) next to the Severity filter in the Table tab, combinable with the severity filter.
+
 ## v0.4.13 2026-08-11
 
 - `Fix`: Duplicate "Vulnerabilities" tabs and inconsistent/broken widget rendering (grids showing 0 or wrong row counts, dashboard charts empty). Root cause: the build produced two identical copies of the bundle, `extension.js` and `extension-trivy.js`, both placed in `dist/resources/`. Argo CD's extension loader matches any file named `^extension(.*)\.js$` and executes every match, so both copies ran, each independently calling `registerResourceExtension` and initializing its own Emotion/chart-library instance — causing duplicate tab entries (no dedup in Argo CD's extension registry) and race conditions between the two independent copies of the same React component fetching/rendering data. The build now only produces a single `extension.js` file.

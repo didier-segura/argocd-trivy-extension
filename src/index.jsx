@@ -300,11 +300,14 @@ const Extension = (props) => {
   return (
     <div>
       <React.Fragment>
-        <select
-          className="vulnerability-report__container_top_select"
-          value={currentContainer}
-          onChange={onOptionChangeHandler}
-        >
+        <div style={{ float: 'right', display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <label style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Select container :</label>
+          <select
+            className="vulnerability-report__container_top_select"
+            style={{ float: 'none', margin: 0 }}
+            value={currentContainer}
+            onChange={onOptionChangeHandler}
+          >
           {containerNames.map((container, index) => {
             return (
               <option key={container || index} value={container}>
@@ -312,7 +315,8 @@ const Extension = (props) => {
               </option>
             );
           })}
-        </select>
+          </select>
+        </div>
           {/* Prefer report-detected Base OS (from vulnerability report). Fall back to container heuristics. */}
           {reportBaseOS?.os ? (
             <div style={{ display: 'inline-block', marginLeft: 12 }}>

@@ -121,15 +121,24 @@ async function GetVulnerabilityData(reportUrl, fallbackConfig) {
 
     // Attempt to discover a single Base OS for the image/report. Prefer explicit fields, then labels, then infer from images.
     let baseOs = '';
+    let baseOsVersion = '';
     if (manifest?.baseOS) baseOs = manifest.baseOS;
     if (!baseOs && manifest?.image?.os) baseOs = manifest.image.os;
     if (!baseOs && manifest?.baseImage) baseOs = manifest.baseImage;
+    // Trivy Operator's actual VulnerabilityReport schema stores this under report.os.{family,name}
+    if (!baseOs && manifest?.report?.os?.family) {
+      baseOs = manifest.report.os.family;
+      baseOsVersion = manifest.report.os.name || '';
+    }
+    if (!baseOs && manifest?.os?.family) {
+      baseOs = manifest.os.family;
+      baseOsVersion = manifest.os.name || '';
+    }
     if (!baseOs && manifest?.metadata?.labels) {
       const labels = manifest.metadata.labels;
       baseOs = labels['baseOS'] || labels['base_os'] || labels['io.k8s.description'] || labels['org.opencontainers.image.os'] || '';
     }
 
-    let baseOsVersion = '';
     if (!baseOs && vulnerabilities.length > 0) {
       // infer from the most common image string among vulnerabilities and collect versions
       const counts = {};
@@ -424,7 +433,7 @@ function resourceTimeSeries(points = 12) {
 function topPackagesData(size) {
   const map = new Map();
   vulnerabilityData.forEach(v => {
-    const pkg = v.packageName || v.pkgName || v.package || v.title || 'unknown';
+    const pkg = v.resource || v.packageName || v.pkgName || v.package || v.title || 'unknown';
     const key = typeof pkg === 'string' ? pkg : JSON.stringify(pkg);
     map.set(key, (map.get(key) || 0) + 1);
   });
@@ -469,7 +478,7 @@ function vulnerabilitiesByType() {
 
     data.push({
       name: vulnType,
-      count: vulnerabilityData.filter(v => v.title.toLowerCase().includes(vulnType.toLowerCase())).length
+      count: vulnerabilityData.filter(v => (v.title || '').toLowerCase().includes(vulnType.toLowerCase())).length
     })
   })
   return data

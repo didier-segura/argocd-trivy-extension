@@ -56,7 +56,17 @@ body{
 	border-radius:6px;
 	border:1px solid #e6eef2;
 	margin-left:6px;
+	width:auto !important;
+	max-width:180px;
+	display:inline-block;
+	flex:0 0 auto;
 }
+
+.grid-toolbar{
+	display:flex;
+	align-items:center;
+}
+
 
 .vulnerability-report table th, .vulnerability-report table td{
 	padding:12px 10px;
