@@ -32,3 +32,8 @@
 ## v0.1.0 2024-04-07
 
 - Initial release
+
+## v0.4.9 2026-08-11
+
+- `Release`: Bump version to 0.4.9
+- `Chore`: Externalized `@emotion/react` and `@emotion/styled` from the UMD bundle to avoid loading multiple Emotion instances in the host environment
