@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.15 2026-08-11
+
+- `Diagnostics`: The v0.4.14 fix (wrapping `ResponsiveContainer` charts in an explicitly-sized div) did not resolve the 6 blank Dashboard charts (Top Packages, Vulnerabilities by Type, Patchable Vulnerabilities, Top Vulnerable Resources, Vulnerabilities by Year, Timeline), while Severity Summary and Resource × Severity Heatmap continue to work correctly. Since the root cause is still unconfirmed, each of the 6 charts is now wrapped in a `ChartErrorBoundary` that displays the exact error message (instead of silently rendering blank) if a render error occurs, and shows an explicit "No data available" placeholder when the underlying data array is genuinely empty. This will make the next test run reveal whether the issue is a JS error, empty/zero data, or something else (e.g. sizing) so it can be fixed definitively rather than guessed at.
+
 ## v0.4.14 2026-08-11
 
 - `Fix`: Dashboard tab showed only 2 of 8 chart cards (Severity Summary and Resource × Severity Heatmap); the other six charts (Top Packages, Vulnerabilities by Type, Patchable Vulnerabilities, Top Vulnerable Resources, Vulnerabilities by Year, Timeline) rendered completely blank. Root cause: those charts' `ResponsiveContainer` had no ancestor element with an explicit CSS size, so inside the CSS Grid dashboard layout Recharts could not reliably measure a non-zero width/height on mount. All `ResponsiveContainer` usages are now wrapped in a div with an explicit pixel width/height, matching the pattern already used successfully by the working Severity Summary chart.
