@@ -85,6 +85,90 @@ function computeEOLInfo(os, version) {
   return { status, eolLink, note };
 }
 
+export function parseImageTag(image) {
+  if (!image) return { name: '', tag: '' };
+  // examples: 'nginx:1.21', 'ubuntu:20.04', 'busybox'
+  const parts = image.split('/').pop().split(':');
+  return { name: parts[0], tag: parts[1] || 'latest' };
+}
+
+/**
+ * Best-effort heuristic to detect base OS from a container image name/tag alone
+ * (no network calls). Used as an immediate fallback/first-pass while the more
+ * accurate report-based detection (via GetVulnerabilityData's baseOs fields) loads.
+ */
+export function getBaseOSInfo(image) {
+  const { name, tag } = parseImageTag(image || '');
+  const lname = name.toLowerCase();
+  const tagLower = (tag || '').toLowerCase();
+
+  let os = null;
+  let version = tagLower === 'latest' ? '' : tagLower;
+  let status = 'unknown';
+  let note = '';
+  let eolLink = null;
+
+  const eolUrl = (distro, ver) => `https://endoflife.date/${distro}/${encodeURIComponent(ver)}`;
+
+  if (lname.includes('ubuntu')) {
+    os = 'Ubuntu';
+    const major = parseInt((version || '').split('.')[0], 10) || null;
+    if (major) {
+      status = major >= 20 ? 'supported' : 'eol';
+      eolLink = eolUrl('ubuntu', version || `${major}.04`);
+    }
+  } else if (lname.includes('debian')) {
+    os = 'Debian';
+    const major = parseInt((version || '').split('.')[0], 10) || null;
+    if (major) {
+      status = major >= 11 ? 'supported' : 'eol';
+      eolLink = eolUrl('debian', String(major));
+    }
+  } else if (lname.includes('alpine')) {
+    os = 'Alpine';
+    const m = parseFloat(version) || null;
+    if (m) {
+      status = m >= 3.14 ? 'supported' : 'eol';
+      eolLink = eolUrl('alpine', String(m));
+    }
+  } else if (lname.includes('almalinux') || lname.includes('rockylinux')) {
+    os = lname.includes('almalinux') ? 'AlmaLinux' : 'RockyLinux';
+    status = 'supported';
+    eolLink = eolUrl(lname.includes('almalinux') ? 'alma' : 'rocky', '');
+  } else if (lname.includes('centos')) {
+    os = 'CentOS';
+    status = 'eol';
+    note = 'CentOS Linux has upstream EOL for many stream releases; consider Alma/Rocky.';
+    eolLink = eolUrl('centos', '');
+  } else if (lname.includes('nginx') || lname.includes('redis') || lname.includes('postgres') || lname.includes('mysql')) {
+    if (tagLower.includes('alpine')) {
+      os = 'Alpine';
+      version = tagLower.replace('alpine', '').replace(/[^0-9.]/g, '') || version;
+      const m = parseFloat(version) || null;
+      if (m) status = m >= 3.14 ? 'supported' : 'eol';
+      eolLink = eolUrl('alpine', String(m || ''));
+    } else if (tagLower.includes('buster') || tagLower.includes('bullseye') || tagLower.includes('bookworm')) {
+      const map = { buster: '10', bullseye: '11', bookworm: '12' };
+      const key = Object.keys(map).find(k => tagLower.includes(k));
+      os = 'Debian';
+      version = map[key] || version;
+      status = 'supported';
+      eolLink = eolUrl('debian', version);
+    } else if (tagLower.includes('focal') || tagLower.includes('jammy') || tagLower.includes('bionic')) {
+      const map = { bionic: '18.04', focal: '20.04', jammy: '22.04' };
+      const key = Object.keys(map).find(k => tagLower.includes(k));
+      os = 'Ubuntu';
+      version = map[key] || version;
+      status = key === 'jammy' || key === 'focal' ? 'supported' : 'eol';
+      eolLink = eolUrl('ubuntu', version);
+    } else {
+      os = null;
+    }
+  }
+
+  return { os, version, status, note, eolLink };
+}
+
 async function GetVulnerabilityData(reportUrl, fallbackConfig) {
   try {
     let response;

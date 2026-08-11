@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.18 2026-08-11
+
+- `Enhancement`: Added a dedicated **OS** tab. Base OS detection (previously a small pill shown next to the container selector, only for the currently-selected container) has moved here and now covers every container/init-container in the resource at once:
+  - Table listing each container's image, detected base OS, version, EOL status, and a direct endoflife.date link.
+  - Prefers accurate report-based detection (from the Trivy scan report) and falls back to an image-tag heuristic while the report loads, with a "Source" column showing which was used.
+  - Summary cards counting how many containers are End of life / Unknown / Supported.
+  - Rows are sorted to surface End-of-life containers first.
+  - The currently-selected container (from the top selector) is highlighted.
+  - Per-row refresh button to re-check a container's OS status on demand.
+  - Notes (e.g. CentOS EOL guidance) are listed below the table when applicable.
+
 ## v0.4.17 2026-08-11
 
 - `Fix`: The Severity Summary pie chart (the only chart left using `ResponsiveContainer`, previously assumed reliable because of its fixed-pixel wrapper div) was still going blank in live testing after v0.4.16, since it sits inside a `display:flex` container which triggers the same Recharts width-measurement failure as the CSS Grid cards. Converted it to the `MeasuredChartContainer` (`ResizeObserver`-based) pattern used by the other 6 charts, and removed the now-unused `ResponsiveContainer` import. All 8 Dashboard cards now use consistent, reliable sizing.
