@@ -23,7 +23,7 @@
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build && rm -f ./dist/resources/extension-trivy.tar && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
+    "build": "vite build && cp -f ./dist/resources/extension.js ./dist/resources/extension-trivy.js && rm -f ./dist/resources/extension-trivy.tar && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
   },
   "eslintConfig": {
     "extends": [
