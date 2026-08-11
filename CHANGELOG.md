@@ -33,6 +33,10 @@
 
 - Initial release
 
+## v0.4.10 2026-08-11
+
+- `Fix`: Reverted Emotion externalization from v0.4.9 — `@emotion/react`/`@emotion/styled` are now bundled directly into the extension again. Externalizing them caused `TypeError: Cannot read properties of undefined (reading 'ThemeContext')` and the extension failing to load entirely, since Argo CD does not expose Emotion as a shared global. Bundling reintroduces a harmless "you are loading @emotion/react when it is already loaded" console warning, but the extension now loads and renders correctly.
+
 ## v0.4.9 2026-08-11
 
 - `Release`: Bump version to 0.4.9
