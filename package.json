@@ -1,6 +1,6 @@
 {
   "name": "argocd-trivy-extension",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.4",
@@ -23,7 +23,7 @@
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build && cp -f ./dist/resources/extension.js ./dist/resources/extension-trivy.js && rm -f ./dist/resources/extension-trivy.tar && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
+    "build": "vite build && rm -f ./dist/resources/extension-trivy.tar && tar -C dist -cvf ./dist/extension-trivy.tar resources && mv ./dist/extension-trivy.tar ./dist/resources/"
   },
   "eslintConfig": {
     "extends": [
