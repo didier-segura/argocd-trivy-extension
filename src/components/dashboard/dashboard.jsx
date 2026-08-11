@@ -40,6 +40,57 @@ function EmptyChartPlaceholder({ height = 120 }) {
     );
 }
 
+// Recharts' <ResponsiveContainer width="100%"> can measure a 0 width on first
+// mount inside this dashboard's CSS Grid layout and never recover, leaving the
+// chart permanently blank even though the underlying data is present. This
+// wrapper measures its own DOM node directly via ResizeObserver and hands the
+// resolved pixel width to the child render-prop, bypassing ResponsiveContainer's
+// internal measurement entirely.
+class MeasuredChartContainer extends Component {
+    state = { width: 0 };
+    containerRef = React.createRef();
+
+    componentDidMount() {
+        this.measure();
+        if (typeof ResizeObserver !== 'undefined') {
+            this.resizeObserver = new ResizeObserver(() => this.measure());
+            if (this.containerRef.current) {
+                this.resizeObserver.observe(this.containerRef.current);
+            }
+        } else {
+            window.addEventListener('resize', this.measure);
+        }
+    }
+
+    componentWillUnmount() {
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+        } else {
+            window.removeEventListener('resize', this.measure);
+        }
+    }
+
+    measure = () => {
+        const node = this.containerRef.current;
+        if (node) {
+            const width = node.clientWidth;
+            if (width && width !== this.state.width) {
+                this.setState({ width });
+            }
+        }
+    }
+
+    render() {
+        const { height, children } = this.props;
+        const { width } = this.state;
+        return (
+            <div ref={this.containerRef} style={{ width: '100%', height }}>
+                {width > 0 ? children(width) : null}
+            </div>
+        );
+    }
+}
+
 class Dashboard extends Component {
     state = {
         selectedResource: null,
@@ -235,25 +286,23 @@ class Dashboard extends Component {
                         <span className="vulnerability-charts__title">Top Packages by Vulnerabilities</span>
                         <ChartErrorBoundary label="Top Packages by Vulnerabilities">
                             {(topPackages || []).length === 0 ? <EmptyChartPlaceholder height={300} /> : (
-                                <div style={{ width: '100%', height: 300 }}>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        {(() => {
-                                            const pkgList = (topPackages || []).slice().sort((a,b) => (b.count||0) - (a.count||0));
-                                            const truncate = (s, n=30) => typeof s === 'string' && s.length > n ? s.slice(0,n-1) + '…' : s;
-                                            return (
-                                                <BarChart layout="vertical" data={pkgList} margin={{ top: 10, right: 20, left: 60, bottom: 10 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                                    <XAxis type="number" />
-                                                    <YAxis type="category" dataKey="name" width={200} tickFormatter={(t) => truncate(t, 40)} />
-                                                    <Tooltip formatter={(value) => [value, 'vulnerabilities']} labelFormatter={(label) => label} />
-                                                    <Bar dataKey="count" fill="#1F8090">
-                                                        {/* optional: color per bar if needed */}
-                                                    </Bar>
-                                                </BarChart>
-                                            )
-                                        })()}
-                                    </ResponsiveContainer>
-                                </div>
+                                <MeasuredChartContainer height={300}>
+                                    {(width) => {
+                                        const pkgList = (topPackages || []).slice().sort((a,b) => (b.count||0) - (a.count||0));
+                                        const truncate = (s, n=30) => typeof s === 'string' && s.length > n ? s.slice(0,n-1) + '…' : s;
+                                        return (
+                                            <BarChart width={width} height={300} layout="vertical" data={pkgList} margin={{ top: 10, right: 20, left: 60, bottom: 10 }}>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                <XAxis type="number" />
+                                                <YAxis type="category" dataKey="name" width={200} tickFormatter={(t) => truncate(t, 40)} />
+                                                <Tooltip formatter={(value) => [value, 'vulnerabilities']} labelFormatter={(label) => label} />
+                                                <Bar dataKey="count" fill="#1F8090">
+                                                    {/* optional: color per bar if needed */}
+                                                </Bar>
+                                            </BarChart>
+                                        )
+                                    }}
+                                </MeasuredChartContainer>
                             )}
                         </ChartErrorBoundary>
                     </div>
@@ -308,9 +357,9 @@ class Dashboard extends Component {
                         <span className="vulnerability-charts__title">Vulnerabilities by Type</span>
                         <ChartErrorBoundary label="Vulnerabilities by Type">
                             {(!vulnerabilitiesByType || vulnerabilitiesByType.every(d => !d.count)) ? <EmptyChartPlaceholder height={350} /> : (
-                                <div style={{ width: '100%', height: 350 }}>
-                                    <ResponsiveContainer width="100%" height={350}>
-                                        <PieChart>
+                                <MeasuredChartContainer height={350}>
+                                    {(width) => (
+                                        <PieChart width={width} height={350}>
                                             <Pie
                                                 dataKey="count"
                                                 data={vulnerabilitiesByType}
@@ -326,8 +375,8 @@ class Dashboard extends Component {
                                             <Tooltip />
                                             <Legend layout="horizontal" verticalAlign="bottom" align="center" />
                                         </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                    )}
+                                </MeasuredChartContainer>
                             )}
                         </ChartErrorBoundary>
                     </div>
@@ -336,9 +385,9 @@ class Dashboard extends Component {
                         <span className="vulnerability-charts__title">Patchable Vulnerabilities</span>
                         <ChartErrorBoundary label="Patchable Vulnerabilities">
                             {(!patchSummaryData || patchSummaryData.every(d => !d.fixed && !d.unfixed)) ? <EmptyChartPlaceholder height={350} /> : (
-                                <div style={{ width: '100%', height: 350 }}>
-                                    <ResponsiveContainer width="100%" height={350}>
-                                        <RadarChart cx="50%" cy="50%" data={patchSummaryData}>
+                                <MeasuredChartContainer height={350}>
+                                    {(width) => (
+                                        <RadarChart width={width} height={350} cx="50%" cy="50%" data={patchSummaryData}>
                                             <PolarGrid />
                                             <PolarAngleAxis dataKey="severity" />
                                             <PolarRadiusAxis angle={30} domain={[0, radarMax]} tickCount={5} />
@@ -347,8 +396,8 @@ class Dashboard extends Component {
                                             <Legend layout="horizontal" verticalAlign="bottom" align="center" />
                                             <Tooltip />
                                         </RadarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                    )}
+                                </MeasuredChartContainer>
                             )}
                         </ChartErrorBoundary>
                     </div>
@@ -357,9 +406,11 @@ class Dashboard extends Component {
                         <span className="vulnerability-charts__title">Top Vulnerable Resources</span>
                         <ChartErrorBoundary label="Top Vulnerable Resources">
                             {(topVulnerableResourcesData || []).length === 0 ? <EmptyChartPlaceholder height={350} /> : (
-                                <div style={{ width: '100%', height: 350 }}>
-                                    <ResponsiveContainer width="100%" height={350}>
+                                <MeasuredChartContainer height={350}>
+                                    {(width) => (
                                         <BarChart
+                                            width={width}
+                                            height={350}
                                             data={topVulnerableResourcesData}
                                             margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
                                         >
@@ -379,8 +430,8 @@ class Dashboard extends Component {
                                             <Bar dataKey="medium" stackId="a" fill="#F1D86F" radius={[0, 0, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
                                             <Bar dataKey="low" stackId="a" fill="#7EE6C8" radius={[4, 4, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
                                         </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                    )}
+                                </MeasuredChartContainer>
                             )}
                         </ChartErrorBoundary>
 
@@ -394,11 +445,13 @@ class Dashboard extends Component {
                                 <div key={`spark-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                                     <div style={{ width: 160, fontSize: 13 }}>{r.name}</div>
                                     <div style={{ flex: 1, height: 48 }}>
-                                        <ResponsiveContainer width="100%" height={48}>
-                                            <AreaChart data={dataSeries}>
-                                                <Area type="monotone" dataKey="count" stroke="#FF7E62" fill="#FFBFB2" fillOpacity={0.6} />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
+                                        <MeasuredChartContainer height={48}>
+                                            {(width) => (
+                                                <AreaChart width={width} height={48} data={dataSeries}>
+                                                    <Area type="monotone" dataKey="count" stroke="#FF7E62" fill="#FFBFB2" fillOpacity={0.6} />
+                                                </AreaChart>
+                                            )}
+                                        </MeasuredChartContainer>
                                     </div>
                                     <div style={{ width: 80, textAlign: 'right', fontWeight: 700 }}>{total}</div>
                                 </div>
@@ -415,9 +468,11 @@ class Dashboard extends Component {
                                 const hasData = (yearData || []).some(d => (d.critical||0)+(d.high||0)+(d.medium||0)+(d.low||0)+(d.unknown||0) > 0);
                                 if (!hasData) return <EmptyChartPlaceholder height={350} />;
                                 return (
-                                    <div style={{ width: '100%', height: 350 }}>
-                                        <ResponsiveContainer width="100%" height={350}>
+                                    <MeasuredChartContainer height={350}>
+                                        {(width) => (
                                             <AreaChart
+                                                width={width}
+                                                height={350}
                                                 data={yearData}
                                                 margin={{ top: 15, right: 30, left: 0, bottom: 0 }}
                                             >
@@ -431,8 +486,8 @@ class Dashboard extends Component {
                                                 <Area type="monotone" dataKey="low" stackId="1" stroke="#00C49F" fill="#00C49F" fillOpacity={0.8} />
                                                 <Area type="monotone" dataKey="unknown" stackId="1" stroke="#0088FE" fill="#0088FE" fillOpacity={0.8} />
                                             </AreaChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                        )}
+                                    </MeasuredChartContainer>
                                 );
                             })()}
                         </ChartErrorBoundary>
@@ -446,9 +501,9 @@ class Dashboard extends Component {
                                     const hasData = (tlData || []).some(d => (d.total||0) > 0);
                                     if (!hasData) return <EmptyChartPlaceholder height={260} />;
                                     return (
-                                        <div style={{ width: '100%', height: 260 }}>
-                                            <ResponsiveContainer width="100%" height={260}>
-                                                <AreaChart data={tlData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                                        <MeasuredChartContainer height={260}>
+                                            {(width) => (
+                                                <AreaChart width={width} height={260} data={tlData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                     <XAxis dataKey="year" />
                                                     <YAxis />
@@ -456,8 +511,8 @@ class Dashboard extends Component {
                                                     <Area type="monotone" dataKey="total" stroke="#1F8090" fill="#DFF7F7" fillOpacity={0.6} />
                                                     <Line type="monotone" dataKey="movingAvg" stroke="#FF7E62" strokeWidth={2} dot={false} />
                                                 </AreaChart>
-                                            </ResponsiveContainer>
-                                        </div>
+                                            )}
+                                        </MeasuredChartContainer>
                                     );
                                 })()}
                             </ChartErrorBoundary>
@@ -468,16 +523,16 @@ class Dashboard extends Component {
                                     <span className="vulnerability-charts__title">Details: {this.state.selectedResource}</span>
                                     <div style={{ marginTop: 8 }}>
                                         {/* sparkline for selected resource */}
-                                        <div style={{ width: '100%', height: 80 }}>
-                                            <ResponsiveContainer width="100%" height={80}>
-                                                <AreaChart data={(resourceTimeSeries && resourceTimeSeries.find(r=>r.name===this.state.selectedResource) ? resourceTimeSeries.find(r=>r.name===this.state.selectedResource).series : this.buildResourceTimeSeries(this.state.selectedResource))}>
+                                        <MeasuredChartContainer height={80}>
+                                            {(width) => (
+                                                <AreaChart width={width} height={80} data={(resourceTimeSeries && resourceTimeSeries.find(r=>r.name===this.state.selectedResource) ? resourceTimeSeries.find(r=>r.name===this.state.selectedResource).series : this.buildResourceTimeSeries(this.state.selectedResource))}>
                                                     <Area type="monotone" dataKey="count" stroke="#D22B2B" fill="#FFD6D6" fillOpacity={0.6} />
                                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                                     <XAxis dataKey="year" />
                                                     <YAxis />
                                                 </AreaChart>
-                                            </ResponsiveContainer>
-                                        </div>
+                                            )}
+                                        </MeasuredChartContainer>
                                         {/* list vulnerabilities */}
                                         <div style={{ marginTop: 12 }}>
                                             {(this.state.vulnerabilities || []).filter(v => (v.resource === this.state.selectedResource)).map((v, i) => (
