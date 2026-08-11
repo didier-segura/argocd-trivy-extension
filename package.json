@@ -1,6 +1,6 @@
 {
   "name": "argocd-trivy-extension",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.4",

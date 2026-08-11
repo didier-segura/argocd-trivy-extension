@@ -1,18 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
-import path from 'path';
 
 export default defineConfig({
   define: {
     // Provide a minimal browser-friendly `process.env` object so
     // libraries that reference `process.env.*` don't crash at runtime.
     'process.env': {},
-  },
-  resolve: {
-    alias: {
-      'react/jsx-runtime': path.resolve(__dirname, 'src/jsx-runtime-alias.js')
-    }
   },
   plugins: [react({ jsxRuntime: 'classic' }), cssInjectedByJsPlugin()],
   build: {
@@ -29,12 +23,17 @@ export default defineConfig({
     },
     rollupOptions: {
       // Keep React and other large libs external so Argo CD provides them.
-      external: ['react', 'react-dom', 'react-dom/client', 'moment'],
+      // Argo CD 3.5+ also requires externalizing react/jsx-runtime: dependencies
+      // (e.g. MUI, Emotion) import the automatic JSX runtime directly, and if it
+      // gets bundled it reaches into React internals removed in React 19, which
+      // crashes the extension at load time in the host.
+      external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'moment'],
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
           'react-dom/client': 'ReactDOM',
+          'react/jsx-runtime': 'ReactJSXRuntime',
           moment: 'Moment'
         }
       }

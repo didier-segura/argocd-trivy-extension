@@ -14,7 +14,15 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script>
-      console.log('window.React', !!window.React, 'window.ReactDOM', !!window.ReactDOM);
+      // Argo CD 3.5+ exposes the automatic JSX runtime as window.ReactJSXRuntime.
+      // Shim it here so extensions that externalize react/jsx-runtime keep working locally.
+      window.ReactJSXRuntime = {
+        jsx: window.React.createElement,
+        jsxs: window.React.createElement,
+        jsxDEV: window.React.createElement,
+        Fragment: window.React.Fragment
+      };
+      console.log('window.React', !!window.React, 'window.ReactDOM', !!window.ReactDOM, 'window.ReactJSXRuntime', !!window.ReactJSXRuntime);
     </script>
 
     <!-- Quick visual polish for the harness (fonts + overrides) -->
