@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.20 2026-08-11
+
+- `Enhancement`: Added summary cards to the **Table** tab, in the same style as the OS tab's status cards — Total, Critical, High, Medium, Low, and Unknown vulnerability counts for the currently-selected container. These always reflect the full report (unaffected by the Severity/Score filters below them), giving an at-a-glance count regardless of the current filter selection.
+
 ## v0.4.19 2026-08-11
 
 - `Enhancement`: EOL status/date/link on the OS tab are now scraped live from the [endoflife.date v1 API](https://endoflife.date/docs/api/v1/) (e.g. https://endoflife.date/alpine-linux) instead of relying only on hardcoded version-threshold guesses. For each detected OS (Ubuntu, Debian, Alpine, CentOS, RHEL, AlmaLinux, Rocky Linux, Amazon Linux, openSUSE), the app queries `GET /api/v1/products/{product}/releases/{cycle}` and uses the real `isEol`/`eolFrom` fields to determine status, with a new **EOL date** column added to the OS tab table. The old hardcoded thresholds are kept only as an offline fallback if the distro isn't mapped, the cycle can't be found, or the request fails. Applies to both the report-based detection and the image-tag heuristic (shown while the report loads). Results are cached in-memory per distro/version for the session to avoid redundant requests.
