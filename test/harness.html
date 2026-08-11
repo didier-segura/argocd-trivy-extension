@@ -1,0 +1,478 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Argo CD Extension Smoke Test</title>
+    <link rel="icon" href="data:;base64,=" />
+  </head>
+  <body>
+    <h3>Argo CD Extension Smoke Test</h3>
+    <div id="root"></div>
+
+    <!-- Load React and ReactDOM as globals like Argo CD would provide -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script>
+      console.log('window.React', !!window.React, 'window.ReactDOM', !!window.ReactDOM);
+    </script>
+
+    <!-- Quick visual polish for the harness (fonts + overrides) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+      body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; background: #f6fbfd; }
+      #root { max-width:1200px; margin:18px auto; padding:10px; }
+      .vulnerability-report__wrapper{ margin-bottom:18px; }
+      .vulnerability-report__container_dropdown{ float:right; }
+      .vulnerability-charts__wrapper{ margin-top:8px }
+      .vulnerability-report__banner_error{ background:#fdecec; border:1px solid #f3b9b9; color:#8a1f1f; }
+      .vulnerability-report__banner_success{ background:#e8f6ee; border:1px solid #b7dfc6; color:#1a6d3a; }
+    </style>
+
+    <!-- Provide a minimal extensionsAPI so the extension can register and render in this smoke test -->
+    <script>
+      window.extensionsAPI = window.extensionsAPI || {};
+      window.extensionsAPI.registerResourceExtension = function(component, selector, resourceKind, title, options) {
+        try {
+          const rootEl = document.getElementById('root');
+            const props = {
+            // Minimal fake props so the component can render in the harness.
+            resource: {
+              kind: resourceKind || 'ReplicaSet',
+              metadata: { name: 'test-resource', namespace: 'default', ownerReferences: [] },
+                spec: { template: { spec: { containers: [
+                  { name: 'app', image: 'example/image:latest' },
+                  { name: 'sidecar', image: 'sidecar-agent:1.0.0' },
+                  { name: 'metrics', image: 'metrics-exporter:0.3.1' }
+                ] } } }
+            },
+            application: { metadata: { name: 'test-app' } }
+          };
+
+          // Use React 18 root API when available, fall back to legacy render.
+          if (window.ReactDOM && typeof window.ReactDOM.createRoot === 'function') {
+            if (!window.__harness_root) {
+              window.__harness_root = window.ReactDOM.createRoot(rootEl);
+            }
+            window.__harness_root.render(window.React.createElement(component, props));
+          } else if (window.ReactDOM && typeof window.ReactDOM.render === 'function') {
+            window.ReactDOM.render(window.React.createElement(component, props), rootEl);
+          } else {
+            console.warn('ReactDOM not available to mount extension UI');
+          }
+
+          console.log('extensionsAPI: registered', { selector, resourceKind, title, options });
+        } catch (err) {
+          console.error('extensionsAPI registration error:', err);
+        }
+      };
+    </script>
+
+    <!-- Mock XHR so bundled axios requests return sample data in the harness -->
+    <script>
+      (function () {
+        const RealXHR = window.XMLHttpRequest;
+
+        function MockXHR() {
+          this._headers = {};
+          this.readyState = 0;
+          this.status = 0;
+          this.responseText = null;
+          this.onreadystatechange = null;
+          this.onload = null;
+        }
+
+        MockXHR.prototype.open = function (method, url) {
+          this._method = method;
+          this._url = url;
+          this.readyState = 1;
+          if (this.onreadystatechange) this.onreadystatechange();
+        };
+
+        MockXHR.prototype.setRequestHeader = function (k, v) {
+          this._headers[k] = v;
+        };
+
+        MockXHR.prototype.getResponseHeader = function (name) {
+          return this._responseHeaders && this._responseHeaders[name.toLowerCase()];
+        };
+
+        MockXHR.prototype.send = function () {
+          const url = this._url || '';
+
+          // Debug: log every XHR send from the harness
+          try { console.log('MockXHR.send called for', url); } catch (e) {}
+
+          // Resource-tree mock
+          if (url.indexOf('/api/v1/applications/test-app/resource-tree') !== -1) {
+            const resp = {
+              nodes: [
+                {
+                  kind: 'VulnerabilityReport',
+                  group: 'aquasecurity.github.io',
+                  namespace: 'default',
+                  name: 'vuln-report-1',
+                  labels: { 'trivy-operator.container.name': 'app' },
+                },
+              ],
+            };
+            this.status = 200;
+            this.responseText = JSON.stringify(resp);
+            this._responseHeaders = { 'content-type': 'application/json' };
+            this.readyState = 4;
+            try { console.log('MockXHR: returning mock resource-tree for', url); } catch (e) {}
+            if (this.onreadystatechange) this.onreadystatechange();
+            if (this.onload) this.onload();
+            return;
+          }
+
+          // Resource fetch mock (returns object with 'data.manifest' string)
+          if (url.indexOf('/api/v1/applications/test-app/resource') !== -1 && url.indexOf('name=vuln-report-1') !== -1) {
+            const manifest = {
+              metadata: { name: 'vuln-report-1', namespace: 'default', labels: { 'trivy-operator.container.name': 'app' } },
+              report: {
+                vulnerabilities: [
+                  {
+                    resource: 'nginx-deployment',
+                    image: 'nginx:1.14.0',
+                    pkgName: 'nginx',
+                    score: 9.8,
+                    severity: 'CRITICAL',
+                    fixedVersion: '1.18.1',
+                    installedVersion: '1.14.0',
+                    primaryLink: 'https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2023-0001',
+                    publishedDate: '2023-01-01T00:00:00Z',
+                    lastModifiedDate: '2023-01-02T00:00:00Z',
+                    title: 'Buffer Overflow in nginx core (Overflow)'
+                  },
+                  {
+                    resource: 'nginx-deployment',
+                    image: 'nginx:1.14.0',
+                    pkgName: 'libssl',
+                    score: 5.3,
+                    severity: 'MEDIUM',
+                    fixedVersion: '',
+                    installedVersion: '1.14.0',
+                    primaryLink: '',
+                    publishedDate: '2022-06-15T00:00:00Z',
+                    lastModifiedDate: '2022-07-01T00:00:00Z',
+                    title: 'Use-after-free in nginx module (Memory corruption)'
+                  },
+                  {
+                    resource: 'redis-statefulset',
+                    image: 'redis:6.0-alpine',
+                    pkgName: 'hiredis',
+                    score: 7.2,
+                    severity: 'HIGH',
+                    fixedVersion: '6.2.6',
+                    installedVersion: '6.0.9',
+                    primaryLink: 'https://example.com/CVE-2021-1001',
+                    publishedDate: '2021-03-10T00:00:00Z',
+                    lastModifiedDate: '2021-04-02T00:00:00Z',
+                    title: 'Heap buffer overflow in hiredis (Overflow)'
+                  },
+                  {
+                    resource: 'postgres-db',
+                    image: 'postgres:12-bullseye',
+                    pkgName: 'postgres',
+                    score: 6.5,
+                    severity: 'MEDIUM',
+                    fixedVersion: '12.8',
+                    installedVersion: '12.3',
+                    primaryLink: 'https://example.com/CVE-2020-2002',
+                    publishedDate: '2020-08-20T00:00:00Z',
+                    lastModifiedDate: '2020-09-01T00:00:00Z',
+                    title: 'SQL injection via malformed query (SQL injection)'
+                  },
+                  {
+                    resource: 'backend-app',
+                    image: 'example/backend:2.1.0',
+                    pkgName: 'express',
+                    score: 4.1,
+                    severity: 'LOW',
+                    fixedVersion: '4.17.2',
+                    installedVersion: '4.16.0',
+                    primaryLink: 'https://example.com/CVE-2019-3003',
+                    publishedDate: '2019-11-05T00:00:00Z',
+                    lastModifiedDate: '2019-11-20T00:00:00Z',
+                    title: 'Cross-site scripting in template rendering (XSS)'
+                  },
+                  {
+                    resource: 'frontend-app',
+                    image: 'example/frontend:1.4.0',
+                    pkgName: 'some-lib',
+                    score: 3.8,
+                    severity: 'LOW',
+                    fixedVersion: '',
+                    installedVersion: '0.9.1',
+                    primaryLink: '',
+                    publishedDate: '2018-02-12T00:00:00Z',
+                    lastModifiedDate: '2018-03-01T00:00:00Z',
+                    title: 'Directory traversal in static asset handler (Directory traversal)'
+                  },
+                  {
+                    resource: 'sidecar-agent',
+                    image: 'alpine:3.12',
+                    pkgName: 'busybox',
+                    score: 8.0,
+                    severity: 'HIGH',
+                    fixedVersion: '1.33.1',
+                    installedVersion: '1.30.1',
+                    primaryLink: 'https://example.com/CVE-2022-4004',
+                    publishedDate: '2022-11-11T00:00:00Z',
+                    lastModifiedDate: '2022-11-20T00:00:00Z',
+                    title: 'Path traversal via symlink resolution (File inclusion)'
+                  },
+                  {
+                    resource: 'auth-service',
+                    image: 'auth:3.0.0',
+                    pkgName: 'jwt-lib',
+                    score: 9.0,
+                    severity: 'CRITICAL',
+                    fixedVersion: '3.1.1',
+                    installedVersion: '3.0.0',
+                    primaryLink: 'https://example.com/CVE-2024-5005',
+                    publishedDate: '2024-02-01T00:00:00Z',
+                    lastModifiedDate: '2024-02-03T00:00:00Z',
+                    title: 'Authentication bypass via JWT validation bug (Input validation)'
+                  },
+                  {
+                    resource: 'legacy-service',
+                    image: 'ubuntu:18.04',
+                    pkgName: 'libxml2',
+                    score: 5.6,
+                    severity: 'MEDIUM',
+                    fixedVersion: '2.9.10',
+                    installedVersion: '2.9.4',
+                    primaryLink: 'https://example.com/CVE-2017-6006',
+                    publishedDate: '2017-06-10T00:00:00Z',
+                    lastModifiedDate: '2017-06-20T00:00:00Z',
+                    title: 'XML external entity attack vector (XXE)'
+                  },
+                  {
+                    resource: 'proxy',
+                    image: 'haproxy:2.0',
+                    pkgName: 'haproxy',
+                    score: 6.9,
+                    severity: 'HIGH',
+                    fixedVersion: '2.2',
+                    installedVersion: '2.0',
+                    primaryLink: 'https://example.com/CVE-2020-7007',
+                    publishedDate: '2020-01-15T00:00:00Z',
+                    lastModifiedDate: '2020-02-01T00:00:00Z',
+                    title: 'Open redirect via header parsing (Open redirect)'
+                  },
+                  {
+                    resource: 'worker',
+                    image: 'worker:0.8.0',
+                    pkgName: 'net-lib',
+                    score: 4.4,
+                    severity: 'LOW',
+                    fixedVersion: '',
+                    installedVersion: '0.8.0',
+                    primaryLink: '',
+                    publishedDate: '2016-05-20T00:00:00Z',
+                    lastModifiedDate: '2016-06-01T00:00:00Z',
+                    title: 'Denial of service via resource exhaustion (DoS)'
+                  },
+                  {
+                    resource: 'api-gateway',
+                    image: 'gateway:1.2.3',
+                    pkgName: 'http-parser',
+                    score: 7.8,
+                    severity: 'HIGH',
+                    fixedVersion: '1.3.5',
+                    installedVersion: '1.2.0',
+                    primaryLink: 'https://example.com/CVE-2022-9009',
+                    publishedDate: '2022-04-04T00:00:00Z',
+                    lastModifiedDate: '2022-04-10T00:00:00Z',
+                    title: 'Server-side request forgery via URL parser (SSRF)'
+                  }
+                  ,
+                  // explicit OS examples for testing base OS detection
+                  {
+                    resource: 'sample-alpine',
+                    image: 'alpine:3.14',
+                    pkgName: 'musl',
+                    score: 5.0,
+                    severity: 'LOW',
+                    fixedVersion: '',
+                    installedVersion: '1.2.0',
+                    primaryLink: '',
+                    publishedDate: '2021-07-01T00:00:00Z',
+                    lastModifiedDate: '2021-07-10T00:00:00Z',
+                    title: 'Example vuln in Alpine base'
+                  },
+                  {
+                    resource: 'sample-ubuntu',
+                    image: 'ubuntu:20.04',
+                    pkgName: 'libssl',
+                    score: 6.1,
+                    severity: 'MEDIUM',
+                    fixedVersion: '1.1.1',
+                    installedVersion: '1.1.0',
+                    primaryLink: '',
+                    publishedDate: '2020-05-12T00:00:00Z',
+                    lastModifiedDate: '2020-05-20T00:00:00Z',
+                    title: 'Example vuln in Ubuntu base'
+                  },
+                  {
+                    resource: 'sample-debian',
+                    image: 'debian:11',
+                    pkgName: 'glibc',
+                    score: 7.0,
+                    severity: 'HIGH',
+                    fixedVersion: '2.31',
+                    installedVersion: '2.30',
+                    primaryLink: '',
+                    publishedDate: '2019-03-15T00:00:00Z',
+                    lastModifiedDate: '2019-03-20T00:00:00Z',
+                    title: 'Example vuln in Debian base'
+                  }
+                ]
+              }
+            };
+
+            // Append randomized vulnerabilities to exercise charts/time-series
+            (function appendRandomVulns() {
+              const severities = ['CRITICAL','HIGH','MEDIUM','LOW','UNKNOWN'];
+              const types = ['Overflow','Memory corruption','SQL injection','XSS','Directory traversal','File inclusion','CSRF','XXE','SSRF','Open redirect','Input validation','DoS','Privilege escalation','Race condition'];
+              const resources = ['nginx-deployment','redis-statefulset','postgres-db','backend-app','frontend-app','sidecar-agent','auth-service','legacy-service','proxy','worker','api-gateway','cache','logger','metrics'];
+              const images = ['nginx:1.14.0','redis:6.0-alpine','postgres:12-bullseye','example/backend:2.1.0','example/frontend:1.4.0','alpine:3.12','auth:3.0.0','ubuntu:18.04','haproxy:2.0','worker:0.8.0','gateway:1.2.3'];
+              const nowYear = new Date().getFullYear();
+
+              function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+              function randomScore(){ return Math.round((Math.random()*9 + Math.random())*10)/10; }
+              function randomDate(year){ const m = Math.floor(Math.random()*12)+1; const d = Math.floor(Math.random()*28)+1; return new Date(year, m-1, d).toISOString(); }
+
+              // generate ~60 entries over the last 8 years
+              for (let i=0;i<60;i++){
+                const year = nowYear - Math.floor(Math.random()*8);
+                const t = pick(types);
+                const res = pick(resources);
+                const image = pick(images);
+                const severity = pick(severities);
+                const score = randomScore();
+                manifest.report.vulnerabilities.push({
+                  resource: res,
+                  image: image,
+                  pkgName: t.toLowerCase().split(' ')[0] + '-lib',
+                  score: score,
+                  severity: severity,
+                  fixedVersion: Math.random() > 0.4 ? '1.0.' + Math.floor(Math.random()*20) : '',
+                  installedVersion: '0.' + Math.floor(Math.random()*10) + '.0',
+                  primaryLink: '',
+                  publishedDate: randomDate(year),
+                  lastModifiedDate: randomDate(year),
+                  title: t + ' vulnerability in ' + (Math.random()>0.5? 'component' : 'library')
+                });
+              }
+
+            })();
+
+            // Return shape expected by the extension: response.data.manifest exists.
+            const resp = { manifest: JSON.stringify(manifest) };
+            this.status = 200;
+            this.responseText = JSON.stringify(resp);
+            this._responseHeaders = { 'content-type': 'application/json' };
+            this.readyState = 4;
+            try { console.log('MockXHR: returning mock resource for', url); } catch (e) {}
+            if (this.onreadystatechange) this.onreadystatechange();
+            if (this.onload) this.onload();
+            return;
+          }
+
+          // Fallback to real XHR for other requests
+          const real = new RealXHR();
+          const self = this;
+          // Proxy events and properties
+          real.open(this._method, this._url);
+          real.onreadystatechange = function () {
+            self.readyState = real.readyState;
+            self.status = real.status;
+            self.responseText = real.responseText;
+            if (self.onreadystatechange) self.onreadystatechange();
+          };
+          // Copy over send arguments
+          real.send.apply(real, arguments);
+        };
+
+        // Install mock
+        window.XMLHttpRequest = MockXHR;
+      })();
+    </script>
+
+    <!-- Mock fetch for endpoints the extension calls via fetch (resource-tree) -->
+    <script>
+      (function () {
+        if (!window.fetch) return;
+        const realFetch = window.fetch.bind(window);
+
+        window.fetch = function (input, init) {
+          const url = (typeof input === 'string') ? input : (input && input.url) || '';
+
+          // resource-tree mock
+          if (url.indexOf('/api/v1/applications/test-app/resource-tree') !== -1) {
+            try { console.log('fetch mock: returning mock resource-tree for', url); } catch (e) {}
+            const resp = {
+              nodes: [
+                {
+                  kind: 'VulnerabilityReport',
+                  group: 'aquasecurity.github.io',
+                  namespace: 'default',
+                  name: 'vuln-report-1',
+                  labels: { 'trivy-operator.container.name': 'app' },
+                },
+              ],
+            };
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              json: async () => resp,
+              text: async () => JSON.stringify(resp),
+            });
+          }
+
+          // fallback to real fetch for everything else
+          return realFetch(input, init);
+        };
+      })();
+    </script>
+
+    <!-- Dev helper: filter noisy React key warnings coming from third-party libs in the harness -->
+    <script>
+      (function () {
+        const origError = console.error.bind(console);
+        console.error = function (...args) {
+          try {
+            const msg = String(args[0] || '');
+            if (msg.includes('Each child in a list should have a unique "key" prop') || msg.includes('You are calling ReactDOMClient.createRoot() on a container that has already been passed to createRoot()')
+                || msg.includes('Support for defaultProps will be removed from function components')
+                || msg.includes('XAxis: Support for defaultProps')
+                || msg.includes('YAxis: Support for defaultProps')) {
+              // Swallow these development-only warnings in the test harness
+              return;
+            }
+          } catch (e) {
+            // fallthrough to original
+          }
+          origError(...args);
+        };
+      })();
+    </script>
+
+    <!-- Load the built extension bundle -->
+    <script src="/dist/resources/extension.js"></script>
+
+    <script>
+      // Basic runtime check: wait a bit and report any global errors captured
+      window.addEventListener('error', (e) => {
+        console.error('Runtime error:', e.message, e.filename, e.lineno);
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        console.error('Unhandled promise rejection:', e.reason);
+      });
+      console.log('Extension loaded (check for UI or console errors).');
+    </script>
+  </body>
+</html>

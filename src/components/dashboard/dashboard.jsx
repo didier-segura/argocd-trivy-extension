@@ -1,18 +1,22 @@
 import React, { Component } from 'react';
-import { Area, AreaChart, RadarChart, PolarGrid, Radar, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { Area, AreaChart, RadarChart, PolarGrid, Radar, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Line } from 'recharts';
 import { DashboardData } from '../../utils/data';
 import "./dashboard.scss";
 import "../grid/vulnerability-report.scss";
 
 class Dashboard extends Component {
     state = {
+        selectedResource: null,
+        hoveredResource: null,
     }
     componentDidMount() {
         this.fetchData();
     }
 
     componentDidUpdate(prevProp) {
-        if (prevProp.reportUrl !== this.props.reportUrl) {
+        const prevFallback = JSON.stringify(prevProp.fallbackConfig || {});
+        const nextFallback = JSON.stringify(this.props.fallbackConfig || {});
+        if (prevProp.reportUrl !== this.props.reportUrl || prevFallback !== nextFallback) {
             this.fetchData();
         }
     }
@@ -24,13 +28,59 @@ class Dashboard extends Component {
         this.setState(res);
     }
 
+    // small custom tooltip to show year + counts
+    CustomTooltip = ({ active, payload, label }) => {
+        if (!active || !payload) return null;
+        return (
+            <div className="recharts-tooltip-custom" style={{ background: 'white', padding: 8, borderRadius: 6, boxShadow: '0 4px 14px rgba(0,0,0,0.08)', fontSize: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{label}</div>
+                {payload.map((p, i) => (
+                    <div key={i} style={{ color: p.color, display: 'flex', justifyContent: 'space-between' }}>
+                        <div>{p.name}</div>
+                        <div style={{ fontWeight: 700 }}>{p.value}</div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    onBarClick = (data, index) => {
+        // data.payload contains the resource's data (name, total, critical, ...)
+        const payload = data && data.payload ? data.payload : null;
+        if (payload && payload.name) {
+            this.setState({ selectedResource: payload.name });
+        }
+    }
+
+    buildResourceTimeSeries(resourceName) {
+        const { vulnerabilities } = this.state;
+        const now = new Date();
+        const startYear = now.getFullYear() - 7;
+        const years = [];
+        for (let y = startYear; y <= now.getFullYear(); y++) years.push(y);
+
+        const series = years.map(year => {
+            const count = (vulnerabilities || []).filter(v => {
+                const rv = (v.resource || '').toString();
+                if (rv !== resourceName) return false;
+                const pd = v.publishedDate || v.published || v.date;
+                if (!pd) return false;
+                const py = new Date(pd).getFullYear();
+                return py === year;
+            }).length;
+            return { year, count };
+        });
+        return series;
+    }
+
     render() {
-        const { severityData, patchSummaryData, topVulnerableResourcesData, vulnerabilitiesByType, vulnerabilityAgeDistribution, status } = this.state;
+        const { severityData, patchSummaryData, topVulnerableResourcesData, vulnerabilitiesByType, vulnerabilityAgeDistribution, severityTimeSeries, timelineSeries, resourceTimeSeries, topPackages, severitySummary, status } = this.state;
 
         if (status === 'clean') {
             return (
                 <div className="vulnerability-report__banner vulnerability-report__banner_success">
-                    No vulnerabilities found for this image.
+                    <span className="secure-flag" aria-hidden="true">✓ Secure</span>
+                    <span style={{ marginLeft: 8 }}>No vulnerabilities found for this image.</span>
                 </div>
             )
         }
@@ -70,29 +120,134 @@ class Dashboard extends Component {
             '#1F5F8B'
         ];
 
+        // compute radar axis max based on patchSummaryData so the chart scales to data
+        const radarMax = (patchSummaryData && patchSummaryData.length) ? Math.max(1, Math.ceil(Math.max(...patchSummaryData.map(p => Math.max(p.fixed || 0, p.unfixed || 0))) * 1.25)) : 5;
+
         return (
             <div>
                 <div className="vulnerability-charts__wrapper">
+                    
+
                     <div className="vulnerability-charts__card">
-                        <span className="vulnerability-charts__title">Vulnerabilities by Severity</span>
-                        <ResponsiveContainer width="100%" height={350}>
-                            <PieChart>
-                                <Pie
-                                    dataKey="count"
-                                    data={severityData}
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={110}
-                                    fill="#8884d8"
-                                >
-                                    {severityData?.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={severityHexColors[index % severityHexColors.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                            </PieChart>
+                        <span className="vulnerability-charts__title">Severity Summary</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 8 }}>
+                            <div style={{ width: 220, height: 180 }}>
+                                <ResponsiveContainer width="100%" height={180}>
+                                    <PieChart>
+                                        <Pie
+                                            data={(severitySummary && severitySummary.length) ? severitySummary.map(s => ({ name: s.severity, count: s.count })) : (severityData || [])}
+                                            dataKey="count"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={50}
+                                            outerRadius={80}
+                                            paddingAngle={2}
+                                        >
+                                            {(severitySummary && severitySummary.length ? severitySummary : severityData || []).map((entry, index) => (
+                                                <Cell key={`sevcell-${index}`} fill={severityHexColors[index % severityHexColors.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                {(() => {
+                                    const list = (severitySummary && severitySummary.length) ? severitySummary : (severityData || []).map(d => ({ severity: d.name, count: d.count }));
+                                    const total = list.reduce((s, p) => s + (p.count || 0), 0);
+                                    const criticalCount = (list.find(x => x.severity === 'CRITICAL') || { count: 0 }).count || 0;
+                                    const pctCrit = total ? Math.round((criticalCount / total) * 100) : 0;
+                                    return (
+                                        <div>
+                                            <div style={{ fontSize: 28, fontWeight: 700 }}>{total}</div>
+                                            <div style={{ color: '#64748b', marginTop: 6 }}>Total vulnerabilities</div>
+                                            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                                                <div style={{ background: '#D22B2B', width: 12, height: 12, borderRadius: 3 }} />
+                                                <div style={{ fontWeight: 700 }}>{criticalCount} CRITICAL</div>
+                                                <div style={{ color: '#64748b' }}>({pctCrit}%)</div>
+                                            </div>
+                                            <div style={{ marginTop: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                                {list.map((s, i) => (
+                                                    <div key={`sev-sm-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: '#fbfeff', borderRadius: 6 }}>
+                                                        <div style={{ width: 10, height: 10, background: severityHexColors[i % severityHexColors.length], borderRadius: 3 }} />
+                                                        <div style={{ fontSize: 13 }}>{s.severity}</div>
+                                                        <div style={{ marginLeft: 6, color: '#64748b' }}>{s.count}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="vulnerability-charts__card">
+                        <span className="vulnerability-charts__title">Top Packages by Vulnerabilities</span>
+                        <ResponsiveContainer width="100%" height={300}>
+                            {(() => {
+                                const pkgList = (topPackages || []).slice().sort((a,b) => (b.count||0) - (a.count||0));
+                                const truncate = (s, n=30) => typeof s === 'string' && s.length > n ? s.slice(0,n-1) + '…' : s;
+                                return (
+                                    <BarChart layout="vertical" data={pkgList} margin={{ top: 10, right: 20, left: 60, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                        <XAxis type="number" />
+                                        <YAxis type="category" dataKey="name" width={200} tickFormatter={(t) => truncate(t, 40)} />
+                                        <Tooltip formatter={(value) => [value, 'vulnerabilities']} labelFormatter={(label) => label} />
+                                        <Bar dataKey="count" fill="#1F8090">
+                                            {/* optional: color per bar if needed */}
+                                        </Bar>
+                                    </BarChart>
+                                )
+                            })()}
                         </ResponsiveContainer>
+                    </div>
+
+                    <div className="vulnerability-charts__card">
+                        <span className="vulnerability-charts__title">Resource × Severity Heatmap</span>
+                        <div style={{ padding: 12 }}>
+                            {(() => {
+                                const severitiesCols = ['CRITICAL','HIGH','MEDIUM','LOW','UNKNOWN'];
+                                const topResources = (topVulnerableResourcesData || []).slice(0, 10);
+                                // compute max for color scale
+                                let max = 0;
+                                topResources.forEach(r => {
+                                    severitiesCols.forEach(s => { max = Math.max(max, r[s.toLowerCase()] || 0); });
+                                });
+                                if (max === 0) max = 1;
+                                const colorFor = (count) => {
+                                    if (!count) return '#f4f7f9';
+                                    const pct = count / max;
+                                    if (pct > 0.75) return '#D22B2B';
+                                    if (pct > 0.5) return '#FF8B8B';
+                                    if (pct > 0.25) return '#FFBEBE';
+                                    return '#FFE7E7';
+                                }
+
+                                return (
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: `200px repeat(${severitiesCols.length}, 1fr)`, gap: 8, alignItems: 'center' }}>
+                                            <div style={{ fontWeight: 700 }}></div>
+                                            {severitiesCols.map((s, i) => <div key={`h-${i}`} style={{ fontWeight: 700, textAlign: 'center' }}>{s}</div>)}
+                                            {topResources.map((r, idx) => (
+                                                <React.Fragment key={`row-${idx}`}>
+                                                    <div style={{ padding: '6px 8px', fontSize: 13 }}>{r.name}</div>
+                                                    {severitiesCols.map((s, j) => {
+                                                        const v = r[s.toLowerCase()] || 0;
+                                                        return (
+                                                            <div key={`cell-${idx}-${j}`} style={{ padding: 6, textAlign: 'center', background: colorFor(v), borderRadius: 4 }}>
+                                                                <div style={{ fontWeight: 700 }}>{v}</div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )
+                            })()}
+                        </div>
                     </div>
 
                     <div className="vulnerability-charts__card">
@@ -123,7 +278,7 @@ class Dashboard extends Component {
                             <RadarChart cx="50%" cy="50%" data={patchSummaryData}>
                                 <PolarGrid />
                                 <PolarAngleAxis dataKey="severity" />
-                                <PolarRadiusAxis angle={30} domain={[0, 150]} />
+                                <PolarRadiusAxis angle={30} domain={[0, radarMax]} tickCount={5} />
                                 <Radar name="fixed" dataKey="fixed" stroke="#00C49F" fill="#00C49F" fillOpacity={0.6} />
                                 <Radar name="unfixed" dataKey="unfixed" stroke="#FF7E62" fill="#FF7E62" fillOpacity={0.6} />
                                 <Legend layout="horizontal" verticalAlign="bottom" align="center" />
@@ -139,24 +294,52 @@ class Dashboard extends Component {
                                 data={topVulnerableResourcesData}
                                 margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
                             >
+                                <defs>
+                                    <linearGradient id="gradCritical" x1="0" x2="1">
+                                        <stop offset="0%" stopColor="#FF6B6B" />
+                                        <stop offset="100%" stopColor="#D22B2B" />
+                                    </linearGradient>
+                                </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                 <XAxis dataKey="name" tick={{fontSize: 12}} />
                                 <YAxis />
-                                <Tooltip />
+                                <Tooltip content={this.CustomTooltip} />
                                 <Legend layout="horizontal" verticalAlign="bottom" align="center" />
-                                <Bar dataKey="critical" stackId="a" fill="#D22B2B" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="high" stackId="a" fill="#FF7E62" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="medium" stackId="a" fill="#F1D86F" radius={[0, 0, 0, 0]} />
-                                <Bar dataKey="low" stackId="a" fill="#00C49F" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="critical" stackId="a" fill="url(#gradCritical)" radius={[0, 0, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
+                                <Bar dataKey="high" stackId="a" fill="#FFB37E" radius={[0, 0, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
+                                <Bar dataKey="medium" stackId="a" fill="#F1D86F" radius={[0, 0, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
+                                <Bar dataKey="low" stackId="a" fill="#7EE6C8" radius={[4, 4, 0, 0]} onClick={this.onBarClick} className="resource-bar" onMouseEnter={(e)=>this.setState({hoveredResource: e && e.payload ? e.payload.name : null})} onMouseLeave={()=>this.setState({hoveredResource: null})} />
                             </BarChart>
                         </ResponsiveContainer>
+
+                        {/* Sparklines per resource (prefer precomputed series if available) */}
+                        <div style={{ marginTop: 12 }}>
+                            {(topVulnerableResourcesData || []).slice(0,6).map((r, idx) => {
+                                const pre = (resourceTimeSeries || []).find(rr => rr.name === r.name);
+                                const dataSeries = pre ? pre.series : this.buildResourceTimeSeries(r.name);
+                                const total = pre ? pre.series.reduce((s, p) => s + (p.count || 0), 0) : (r.total || (r.critical + r.high + r.medium + r.low));
+                                return (
+                                <div key={`spark-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                                    <div style={{ width: 160, fontSize: 13 }}>{r.name}</div>
+                                    <div style={{ flex: 1, height: 48 }}>
+                                        <ResponsiveContainer width="100%" height={48}>
+                                            <AreaChart data={dataSeries}>
+                                                <Area type="monotone" dataKey="count" stroke="#FF7E62" fill="#FFBFB2" fillOpacity={0.6} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                    <div style={{ width: 80, textAlign: 'right', fontWeight: 700 }}>{total}</div>
+                                </div>
+                                )
+                            })}
+                        </div>
                     </div>
 
                     <div className="vulnerability-charts__card">
                         <span className="vulnerability-charts__title">Vulnerabilities by Year</span>
                         <ResponsiveContainer width="100%" height={350}>
                             <AreaChart
-                                data={vulnerabilityAgeDistribution}
+                                data={severityTimeSeries && severityTimeSeries.length ? severityTimeSeries : vulnerabilityAgeDistribution}
                                 margin={{ top: 15, right: 30, left: 0, bottom: 0 }}
                             >
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -171,6 +354,47 @@ class Dashboard extends Component {
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
+                    
+                        <div className="vulnerability-charts__card">
+                            <span className="vulnerability-charts__title">Timeline (Total & Moving Avg)</span>
+                            <ResponsiveContainer width="100%" height={260}>
+                                <AreaChart data={timelineSeries && timelineSeries.length ? timelineSeries : severityTimeSeries} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="year" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Area type="monotone" dataKey="total" stroke="#1F8090" fill="#DFF7F7" fillOpacity={0.6} />
+                                    <Line type="monotone" dataKey="movingAvg" stroke="#FF7E62" strokeWidth={2} dot={false} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                            {/* Selected resource drill-down */}
+                            {this.state.selectedResource && (
+                                <div className="vulnerability-charts__card">
+                                    <span className="vulnerability-charts__title">Details: {this.state.selectedResource}</span>
+                                    <div style={{ marginTop: 8 }}>
+                                        {/* sparkline for selected resource */}
+                                        <ResponsiveContainer width="100%" height={80}>
+                                            <AreaChart data={(resourceTimeSeries && resourceTimeSeries.find(r=>r.name===this.state.selectedResource) ? resourceTimeSeries.find(r=>r.name===this.state.selectedResource).series : this.buildResourceTimeSeries(this.state.selectedResource))}>
+                                                <Area type="monotone" dataKey="count" stroke="#D22B2B" fill="#FFD6D6" fillOpacity={0.6} />
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                                <XAxis dataKey="year" />
+                                                <YAxis />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                        {/* list vulnerabilities */}
+                                        <div style={{ marginTop: 12 }}>
+                                            {(this.state.vulnerabilities || []).filter(v => (v.resource === this.state.selectedResource)).map((v, i) => (
+                                                <div key={`v-${i}`} style={{ padding: 8, borderBottom: '1px solid #eef6f8' }}>
+                                                    <strong style={{ marginRight: 8 }}>{v.title}</strong>
+                                                    <span style={{ marginLeft: 8 }} className={`sev-badge sev-${(v.severity||'UNKNOWN').toUpperCase()}`}>{(v.severity||'UNKNOWN').toUpperCase()}</span>
+                                                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{v.primaryLink ? <a href={v.primaryLink} target="_blank" rel="noreferrer">{v.primaryLink}</a> : null}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                 </div>
             </div>
         )
