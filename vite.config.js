@@ -28,13 +28,17 @@ export default defineConfig({
       fileName: () => 'extension.js'
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'react-dom/client', 'moment'],
+      // Keep React and other large libs external so Argo CD provides them.
+      // Also externalize Emotion to avoid loading multiple copies in the host.
+      external: ['react', 'react-dom', 'react-dom/client', 'moment', '@emotion/react', '@emotion/styled'],
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
           'react-dom/client': 'ReactDOM',
-          moment: 'Moment'
+          moment: 'Moment',
+          '@emotion/react': 'EmotionReact',
+          '@emotion/styled': 'EmotionStyled'
         }
       }
     }
