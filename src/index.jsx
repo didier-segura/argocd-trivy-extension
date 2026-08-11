@@ -354,37 +354,42 @@ const Extension = (props) => {
 const component = Extension;
 
 ((window) => {
+  // NOTE: group must be "**" (not "*"). ArgoCD's extensions-service filters
+  // registered extensions via minimatch(resourceGroup, extension.group), and
+  // minimatch("", "*") is false — "*" does not match the empty string used
+  // for core API group resources like Pod (group: ""). "**" matches the
+  // empty string as well as any other group (e.g. "apps", "batch").
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
+    "**",
     "ReplicaSet",
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
+    "**",
     "Pod",
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
+    "**",
     "StatefulSet",
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
+    "**",
     "CronJob",
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }
   );
   window?.extensionsAPI?.registerResourceExtension(
     component,
-    "*",
+    "**",
     "Job",
     "Vulnerabilities",
     { icon: "fa fa-triangle-exclamation" }

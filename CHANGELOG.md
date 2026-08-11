@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.12 2026-08-11
+
+- `Fix`: "Vulnerabilities" tab was never displayed on any resource (Pod, ReplicaSet, StatefulSet, CronJob, Job). Root cause: `registerResourceExtension` was called with group `"*"`, but Argo CD's extensions service matches the resource's real API group against the registered group using `minimatch(resourceGroup, extension.group)`, and `minimatch("", "*")` evaluates to `false`. Since Pod's core API group is the empty string, the tab was always filtered out for Pod (and would have been fragile for any other core-group resource). Changed the registered group to `"**"`, which correctly matches the empty string as well as non-empty groups like `apps`/`batch`.
+
 ## v0.4.1 2026-08-05
 
 - `Chore`: Switched GitHub Actions release pipeline to use auto-generated release notes
