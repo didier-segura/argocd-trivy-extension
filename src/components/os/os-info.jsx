@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getBaseOSInfo } from '../../utils/data';
+import { getBaseOSInfo, fetchEolInfo } from '../../utils/data';
 import './os-info.scss';
 
 const STATUS_META = {
@@ -22,27 +22,46 @@ function StatusPill({ status, note }) {
  * in the resource (not just the currently-selected one), preferring the accurate
  * report-based detection (Trivy Operator's `report.os.{family,name}`) and falling
  * back to an image-tag heuristic while the report loads or if none is available.
+ *
+ * EOL status/date/link are scraped live from the endoflife.date API
+ * (https://endoflife.date/docs/api/v1/, e.g. https://endoflife.date/alpine-linux)
+ * for whichever OS/version was detected, rather than relying on hardcoded version
+ * thresholds. The report-based path already resolves this live (see
+ * `fetchEolInfo` used inside `GetVulnerabilityData`); for the heuristic path this
+ * component fetches it directly so accurate EOL info is available even before (or
+ * without) a scan report.
  */
 const OSInfo = ({ containers, currentContainer, fetchContainerOS }) => {
-  // entry shape: { image, heuristic, report, loading, error }
+  // entry shape: { image, heuristic, heuristicEol, report, loading, error }
   const [entries, setEntries] = useState({});
 
   const containerKey = useMemo(() => (containers || []).map(c => `${c.name}=${c.image}`).join('|'), [containers]);
 
-  // Seed heuristic (synchronous, no network) results immediately, then kick off
-  // the async report-based lookup for each container.
+  // Seed heuristic (synchronous, no network) results immediately, kick off a live
+  // endoflife.date lookup for that heuristic guess, and kick off the async
+  // report-based lookup for each container.
   useEffect(() => {
     let cancelled = false;
 
     setEntries(() => {
       const seeded = {};
       (containers || []).forEach(({ name, image }) => {
-        seeded[name] = { image, heuristic: getBaseOSInfo(image), report: null, loading: true, error: false };
+        seeded[name] = { image, heuristic: getBaseOSInfo(image), heuristicEol: null, report: null, loading: true, error: false };
       });
       return seeded;
     });
 
-    (containers || []).forEach(({ name }) => {
+    (containers || []).forEach(({ name, image }) => {
+      const heuristic = getBaseOSInfo(image);
+      if (heuristic?.os) {
+        fetchEolInfo(heuristic.os, heuristic.version)
+          .then((live) => {
+            if (cancelled || !live) return;
+            setEntries((prev) => ({ ...prev, [name]: { ...prev[name], heuristicEol: live } }));
+          })
+          .catch(() => {});
+      }
+
       if (typeof fetchContainerOS !== 'function') return;
       fetchContainerOS(name)
         .then((report) => {
@@ -68,10 +87,18 @@ const OSInfo = ({ containers, currentContainer, fetchContainerOS }) => {
   }, [fetchContainerOS]);
 
   const rows = (containers || []).map(({ name, image }) => {
-    const entry = entries[name] || { image, heuristic: getBaseOSInfo(image), report: null, loading: true, error: false };
-    // Prefer report-detected OS (accurate, from the actual scanned image), fall back to heuristic.
-    const detected = entry.report?.os ? entry.report : (entry.heuristic?.os ? entry.heuristic : null);
-    const source = entry.report?.os ? 'report' : (entry.heuristic?.os ? 'heuristic' : null);
+    const entry = entries[name] || { image, heuristic: getBaseOSInfo(image), heuristicEol: null, report: null, loading: true, error: false };
+    // Prefer report-detected OS (accurate, from the actual scanned image). Otherwise
+    // use the image-tag heuristic, merged with its live endoflife.date lookup once resolved.
+    let detected = null;
+    let source = null;
+    if (entry.report?.os) {
+      detected = entry.report;
+      source = 'report';
+    } else if (entry.heuristic?.os) {
+      detected = entry.heuristicEol ? { ...entry.heuristic, ...entry.heuristicEol } : entry.heuristic;
+      source = entry.heuristicEol ? 'heuristic-live' : 'heuristic';
+    }
     return { name, image, entry, detected, source };
   });
 
@@ -115,6 +142,7 @@ const OSInfo = ({ containers, currentContainer, fetchContainerOS }) => {
             <th>Base OS</th>
             <th>Version</th>
             <th>Status</th>
+            <th>EOL date</th>
             <th>Source</th>
             <th>EOL info</th>
             <th></th>
@@ -131,13 +159,16 @@ const OSInfo = ({ containers, currentContainer, fetchContainerOS }) => {
               <td>{detected?.os || (entry.loading ? '…' : '—')}</td>
               <td>{detected?.version || '—'}</td>
               <td>
-                {entry.loading ? (
+                {!detected && entry.loading ? (
                   <span className="os-info__loading">Checking…</span>
                 ) : (
                   <StatusPill status={detected?.status || 'unknown'} note={detected?.note} />
                 )}
               </td>
-              <td className="os-info__source">{source === 'report' ? 'Scan report' : source === 'heuristic' ? 'Image tag guess' : '—'}</td>
+              <td>{detected?.eolDate || '—'}</td>
+              <td className="os-info__source">
+                {source === 'report' ? 'Scan report' : source === 'heuristic-live' ? 'Image tag guess' : source === 'heuristic' ? 'Image tag guess (checking EOL…)' : '—'}
+              </td>
               <td>
                 {detected?.eolLink ? (
                   <a href={detected.eolLink} target="_blank" rel="noopener noreferrer">endoflife.date</a>

@@ -155,7 +155,7 @@ const Extension = (props) => {
     const fallback = { appName, resourceNamespace, resourceKind, resourceName, containerName };
     const res = await GridData(url, fallback);
     if (res && res.baseOs) {
-      return { os: res.baseOs, version: res.baseOsVersion || '', status: res.baseOsStatus || 'unknown', eolLink: res.baseOsEolLink || null, note: res.baseOsNote || '' };
+      return { os: res.baseOs, version: res.baseOsVersion || '', status: res.baseOsStatus || 'unknown', eolLink: res.baseOsEolLink || null, note: res.baseOsNote || '', eolDate: res.baseOsEolDate || null, source: res.baseOsSource || 'heuristic' };
     }
     return null;
   }, [appName, resourceName, resourceNamespace, resourceKind, baseURI]);

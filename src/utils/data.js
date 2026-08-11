@@ -38,6 +38,69 @@ function detectOSAndVersion(image) {
   return { os: '', version: '' };
 }
 
+// Maps our internal OS labels to endoflife.date product slugs (https://endoflife.date/api/v1/products).
+const EOL_PRODUCT_SLUGS = {
+  'ubuntu': 'ubuntu',
+  'debian': 'debian',
+  'alpine': 'alpine-linux',
+  'centos': 'centos',
+  'rhel': 'rhel',
+  'almalinux': 'almalinux',
+  'rockylinux': 'rocky-linux',
+  'amazon linux': 'amazon-linux',
+  'opensuse': 'opensuse',
+};
+
+// endoflife.date release "cycle" naming differs per distro: Ubuntu/Alpine use
+// major.minor (e.g. "22.04", "3.19"), while Debian/RHEL-family use major only (e.g. "12").
+function normalizeEolCycle(slug, version) {
+  if (!version) return null;
+  const parts = String(version).split('.');
+  if (slug === 'ubuntu' || slug === 'alpine-linux') return parts.slice(0, 2).join('.');
+  return parts[0];
+}
+
+const eolCache = new Map();
+
+/**
+ * Look up the real, up-to-date EOL status for a detected OS/version from the
+ * endoflife.date public API (https://endoflife.date/docs/api/v1/), e.g.
+ * https://endoflife.date/alpine-linux. Returns null (rather than throwing) when
+ * the distro isn't mapped, the cycle isn't found, or the request fails, so
+ * callers can fall back to the offline heuristic in `computeEOLInfo`.
+ * Results are cached in-memory for the lifetime of the page.
+ */
+export async function fetchEolInfo(osName, version) {
+  if (!osName) return null;
+  const slug = EOL_PRODUCT_SLUGS[osName.toLowerCase()];
+  if (!slug) return null;
+  const cycle = normalizeEolCycle(slug, version);
+  if (!cycle) return null;
+
+  const cacheKey = `${slug}:${cycle}`;
+  if (eolCache.has(cacheKey)) return eolCache.get(cacheKey);
+
+  const promise = (async () => {
+    try {
+      const url = `https://endoflife.date/api/v1/products/${slug}/releases/${encodeURIComponent(cycle)}`;
+      const res = await axios.get(url, { timeout: 5000 });
+      const r = res?.data?.result;
+      if (!r) return null;
+      const status = r.isEol ? 'eol' : 'supported';
+      const eolLink = `https://endoflife.date/${slug}`;
+      let note = '';
+      if (r.isEol && r.eolFrom) note = `${osName} ${cycle} reached end of life on ${r.eolFrom}.`;
+      else if (!r.isEol && r.eolFrom) note = `${osName} ${cycle} is supported until ${r.eolFrom}.`;
+      return { status, eolLink, eolDate: r.eolFrom || null, isLts: !!r.isLts, note, source: 'endoflife.date' };
+    } catch (err) {
+      return null;
+    }
+  })();
+
+  eolCache.set(cacheKey, promise);
+  return promise;
+}
+
 function computeEOLInfo(os, version) {
   if (!os) return { status: 'unknown', eolLink: null, note: '' };
   const mapDistro = (d) => {
@@ -246,8 +309,12 @@ async function GetVulnerabilityData(reportUrl, fallbackConfig) {
       }
     }
 
-    const eolInfo = computeEOLInfo(baseOs, baseOsVersion);
-    return { status: vulnerabilities.length > 0 ? 'ok' : 'clean', vulnerabilities, baseOs, baseOsVersion, baseOsStatus: eolInfo.status, baseOsEolLink: eolInfo.eolLink, baseOsNote: eolInfo.note };
+    // Prefer the live endoflife.date lookup for accurate EOL info; fall back to the
+    // offline heuristic (approximate version-threshold guesses) if the distro isn't
+    // mapped, the cycle isn't found, or the request fails (e.g. offline/CORS-blocked).
+    let eolInfo = await fetchEolInfo(baseOs, baseOsVersion);
+    if (!eolInfo) eolInfo = computeEOLInfo(baseOs, baseOsVersion);
+    return { status: vulnerabilities.length > 0 ? 'ok' : 'clean', vulnerabilities, baseOs, baseOsVersion, baseOsStatus: eolInfo.status, baseOsEolLink: eolInfo.eolLink, baseOsNote: eolInfo.note, baseOsEolDate: eolInfo.eolDate || null, baseOsSource: eolInfo.source || 'heuristic' };
   } catch (error) {
     return { status: 'error', vulnerabilities: [] };
   }
@@ -313,7 +380,7 @@ async function findReportByLabels(fallbackConfig) {
 
 
 export async function GridData(reportUrl, fallbackConfig) {
-  const { status, vulnerabilities, baseOs, baseOsVersion, baseOsStatus, baseOsEolLink, baseOsNote } = await GetVulnerabilityData(reportUrl, fallbackConfig);
+  const { status, vulnerabilities, baseOs, baseOsVersion, baseOsStatus, baseOsEolLink, baseOsNote, baseOsEolDate, baseOsSource } = await GetVulnerabilityData(reportUrl, fallbackConfig);
   // Default sort by score (descending). If scores tie, fall back to severity order.
   const severityOrder = { "CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "UNKNOWN": 4 };
   const sortedVulns = [...vulnerabilities].sort((a, b) => {
@@ -342,7 +409,7 @@ export async function GridData(reportUrl, fallbackConfig) {
     v.primaryLink || '',
     v.publishedDate || '' // used by age formatter
   ]);
-  return { status, rows, baseOs, baseOsVersion, baseOsStatus, baseOsEolLink, baseOsNote };
+  return { status, rows, baseOs, baseOsVersion, baseOsStatus, baseOsEolLink, baseOsNote, baseOsEolDate, baseOsSource };
 }
 
 export async function DashboardData(reportUrl, fallbackConfig) {
